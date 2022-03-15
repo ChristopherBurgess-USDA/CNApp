@@ -6,8 +6,30 @@ Description: PKG_DESC.
 License: MIT + file LICENSE
 Imports: 
     config (>= 0.3.1),
+    cowplot,
+    dplyr,
+    ggplot2,
     golem (>= 0.3.1),
-    shiny (>= 1.7.1)
+    googlesheets4,
+    gt,
+    lubridate,
+    pkgload,
+    processx,
+    readr,
+    readxl,
+    rvest,
+    scales,
+    shiny (>= 1.7.1),
+    shinydashboard,
+    shinyjs,
+    stringr,
+    tidyr,
+    writexl
 Encoding: UTF-8
 LazyData: true
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2
+Suggests: 
+    spelling,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Language: en-US

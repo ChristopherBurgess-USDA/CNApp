@@ -9,11 +9,14 @@ app_ui <- function(request) {
     # Leave this function for adding external resources
     golem_add_external_resources(),
     # Your application UI logic 
-    fluidPage(
-      h1("CNApp")
+    dashboardPage( # Application title
+      dashboardHeader(title = "CN Parser"),
+      dashboardSidebar(sidebarMenu(id = "tabs", sidebarMenuOutput("menu"))),
+      dashboardBody(useShinyjs(), uiOutput("tabs"))
     )
   )
 }
+
 
 #' Add external Resources to the Application
 #' 
@@ -39,4 +42,5 @@ golem_add_external_resources <- function(){
     # for example, you can add shinyalert::useShinyalert() 
   )
 }
+
 
