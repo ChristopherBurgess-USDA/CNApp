@@ -59,3 +59,9 @@ check_sample = function(in_data, in_std){
     left_join(samples) %>%
     return()
 }
+
+update_std <- function(std_data, run_std){
+  run_std <- select(run_std, date_time, element, value) %>%
+    pivot_wider(names_from = element, values_from = value)
+  bind_rows(std_data, run_std)
+}

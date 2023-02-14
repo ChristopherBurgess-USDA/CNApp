@@ -36,10 +36,32 @@ std_table_create = function(tab_data){
       locations = lapply(c_names, cell_coloring, compare = "Action")
     ) %>%
     tab_spanner_delim(delim = ";") %>%
+    tab_header(title = "Run Standard Check") %>%
     return()
 }
 
-sam_graph_format = function(g_data, tar_ele){
+std_graph_format = function(std_data, h_lines, date_range){
+  ## The function graphs takes the filtered data and a y variable to plot
+  ## Paramters: data (tibble) and y variable (string)
+  ## Returns: ggplot
+  std_data %>%
+    pivot_longer(-date_time, names_to = "element", values_to = "value") %>%
+    left_join(h_lines) %>%
+    ggplot(aes(x = date_time, y = value)) +
+    geom_point(size = 3) +
+    geom_hline(aes(yintercept = warn_low)) +
+    geom_hline(aes(yintercept = warn_high)) +
+    facet_wrap(~element, ncol = 1, scales = "free_y") +
+    theme_cowplot(16) +
+    xlim(c(date_range[1], date_range[2])) +
+    labs(x = "Time", y = "Element Percentage") +
+    panel_border() +
+    background_grid() %>%
+    return()
+}
+
+
+sam_graph_format = function(g_data){
   ## The function graphs takes the filtered data and a y variable to plot
   ## Paramters: data (tibble) and y variable (string)
   ## Returns: ggplot
@@ -49,7 +71,7 @@ sam_graph_format = function(g_data, tar_ele){
     geom_point(size = 3) +
     facet_wrap(~element, ncol = 1, scales = "free_y") +
     theme_cowplot(16) +
-    labs(x = "Time", y = "Element Percentage") +
+    labs(x = "Time", y = "Element Percentage", title = "Sample Data") +
     panel_border() +
     background_grid() %>%
     return()

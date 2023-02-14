@@ -11,6 +11,7 @@ library(readr)
 library(dplyr)
 library(tidyr)
 library(rvest)
+library(readxl)
 
 library(googlesheets4)
 library(writexl)
@@ -25,13 +26,9 @@ library(shiny)
 library(shinydashboard)
 library(shinyjs)
 
-options(
-  gargle_oauth_cache = ".secrets",
-  gargle_oauth_email = TRUE
-)
-
 app_server <- function( input, output, session ) {
   # Your application server logic 
+  
   output$menu = renderMenu({
     sidebarMenu(
       menuItem("Upload", tabName = "upload", icon = icon("upload"))
@@ -43,7 +40,7 @@ app_server <- function( input, output, session ) {
       tabItem(
         tabName = "upload",
         box(
-          title = h3("Upload and Choose Standard Type"),
+          title = h3("Upload Data and Choose Standard Type"),
           selectInput(
             label = h4("Choose Standard Type"), inputId = "method",
             choices = list(
@@ -54,8 +51,15 @@ app_server <- function( input, output, session ) {
             selected = ""
           ),
           fileInput(
+            inputId = "upload_std",
+            label = h4("Upload Standards"),
+            multiple = F,
+            placeholder = "Browse",
+            accept = c(".xlsx")
+          ),
+          fileInput(
             inputId = "upload",
-            label = h4("Upload"),
+            label = h4("Upload Elmentar Data"),
             multiple = F,
             placeholder = "Browse",
             accept = c(".xls")
@@ -63,27 +67,48 @@ app_server <- function( input, output, session ) {
         ),
       ),
       tabItem(
-        tabName = "std_qc", h3("Quality Check of Standards"),
-        box(width=12, gt_output(outputId = "std_tab"))
+        tabName = "std_qc", h3("Control Plots"),
+        div(style = "margin: auto; width: 80%", uiOutput("date_slider")),
+        plotOutput(outputId = "std_gg")
       ),
       tabItem(
-        tabName = "explore",
+        tabName = "explore", h3("Run Standards and Data QC"),
+        gt_output(outputId = "std_tab"),
         plotOutput(outputId = "sam_graph", click = "sam_click"),
         verbatimTextOutput(outputId = "sam_info")
       ),
       tabItem(
         tabName = "download", h3("Download Data"),
         box(
-          helpText("Download data as excel file."),
-          downloadButton(outputId = "download", label = "Download")
+          downloadButton(outputId = "download", label = "Download Data")
+        ),
+        box(
+          downloadButton(outputId = "download_std", label = "Download Updated Standards")
         )
       )
     )
   })
 
-  std_data = eventReactive(input$method, {
-    read_google_std(input$method) %>%
-      return()
+  import_std_data = eventReactive(input$upload_std, {
+    read_excel(input$upload_std$datapath)
+  })
+  std_data = reactive({
+    req(import_std_data)
+    import_std_data() %>%
+      pivot_longer(
+        -date_time,
+        names_to = "element", values_to = "value"
+      ) %>%
+      filter(!is.na(value))
+  })
+  
+  input_data = eventReactive(input$upload, {
+    ext = tools::file_ext(input$upload$name)
+    validate(need(
+      ext %in% c("xls"),
+      "Please upload raw Elementar data"
+    ))
+    load_data(input$upload$datapath) 
   })
   
   std_cutoff = reactive({
@@ -103,14 +128,6 @@ app_server <- function( input, output, session ) {
       return()
   })
   
-  input_data = eventReactive(input$upload, {
-    ext = tools::file_ext(input$upload$name)
-    validate(need(
-      ext %in% c("xls"),
-      "Please upload raw Elementar data"
-    ))
-    load_data(input$upload$datapath) 
-  })
   
   checked_std = reactive({
     req(input_data(), std_cutoff())
@@ -122,55 +139,92 @@ app_server <- function( input, output, session ) {
     check_sample(input_data(), checked_std())
   })
   
-  
+  updated_std = reactive({
+    req(import_std_data(), checked_std())
+    update_std(import_std_data(), checked_std())
+  })
   
   observe({
-    ## The observe is like ta reactive accept it doesn't return anything
-    ## Since we do not know how many or which files the user will be uploading the observe
-    ## is constantly updating the multiple choice list with the name of the files.
-    ele_list = data()$element
-    updateSelectInput(
-      session,
-      inputId = "element",
-      choices = ele_list,
-      selected = NULL
-    )
+    req(input$method, input$upload, input$upload_std)
     output$menu = renderMenu({
       sidebarMenu(
         menuItem("Upload", tabName = "upload", icon = icon("upload")),
         menuItem("Download", tabName = "download", icon = icon("download")),
-        menuItem("Standard QC", tabName = "std_qc", icon = icon("heartbeat")),
-        menuItem("Data Explore", icon = icon("search"), tabName = "explore")
+        menuItem("Control Plots", tabName = "std_qc", icon = icon("chart-line")),
+        menuItem("Data QC", icon = icon("heartbeat"), tabName = "explore")
       )
     })
-    
   })
+
+  output$date_slider <- renderUI({
+    req(updated_std())
+    dates <- updated_std()$date_time
+    sliderInput(
+      "date_range", label = h4("Select Date Range to Plot"),
+      min = min(dates), max = max(dates),
+      value = c(min(dates), max(dates)), width = "100%"
+    )
+  })
+
+  
+  
   
   sam_data= eventReactive(
     input$sam_click,
     {
      temp =  data() %>%
         select(-std_check) %>%
-        pivot_longer(-c("Name", "date_time"), names_to = "element", values_to = "value") %>%
+        pivot_longer(
+          -c("Name", "date_time"), names_to = "element", values_to = "value"
+        ) %>%
         nearPoints(input$sam_click, xvar = "date_time", yvar = "value")
      filter(data(), Name == temp$Name[1])
       
     }
   )
-    output$sam_graph = renderPlot({sam_graph_format(data(), input$element)})
-    output$sam_info = renderPrint({
-      sam_data() %>%
-        print.data.frame()
-    })
+  
+  output$sam_graph = renderPlot({sam_graph_format(data())})
+  
+
+  
+  output$sam_info = renderPrint({
+    sam_data() %>%
+      print.data.frame()
+  })
+  
+
   
   output$std_tab = render_gt(std_table_create(checked_std()))
   
+  output$std_gg = renderPlot({
+    std_graph_format(updated_std(), std_cutoff(), input$date_range)
+  })
+  
+
+  
+  output$sam_graph = renderPlot({sam_graph_format(data())})
+  output$sam_info = renderPrint({
+    sam_data() %>%
+      print.data.frame()
+  })
+  
   # Allows the user to download data.
   output$download = downloadHandler(
-    filename = "parsed_cn_data.xlsx",
+    filename = paste0(format(Sys.Date(), "%Y%m%d"), "_parsed_cn_data.xlsx"),
     content = function(file){
       data() %>%
         write_xlsx(file)
     }
   )
+  
+  output$download_std = downloadHandler(
+    filename = paste0(
+      "CN", "_STD_", input$method, "_", format(Sys.Date(), "%Y%m%d"), ".xlsx"
+    ),
+    content = function(file){
+      updated_std() %>%
+        write_xlsx(file)
+    }
+  )
+  
 }

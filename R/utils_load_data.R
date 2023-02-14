@@ -14,9 +14,9 @@ load_data = function(input_path){
     select(
       Name, date_time = contains("Date"), contains("%") 
     ) %>%
+    filter(!(Name %in% c("Empty", ""))) %>%
     mutate(
       date_time = parse_date_time(date_time, "mdYHM")
-    ) %>%
-    filter(Name != "Empty")
+    )
 }
 
